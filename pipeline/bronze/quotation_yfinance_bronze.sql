@@ -1,9 +1,9 @@
 -- Bronze table for yfinance quotations (commodities, forex, etc.)
-CREATE OR REFRESH STREAMING LIVE TABLE bronze_quotation_yfinance
+CREATE OR REFRESH STREAMING LIVE TABLE lakehouse.bronze.quotation_yfinance
 COMMENT 'Bronze table from raw yfinance CSV'
 TBLPROPERTIES (
   'quality' = 'bronze',
-  'source' = 'raw_public/quotation_yfinance.csv'
+  'source' = 'raw_public/quotation_yfinance'
 )
 AS
 SELECT
@@ -13,7 +13,8 @@ SELECT
   CAST(horario_coleta AS TIMESTAMP) AS horario_coleta,
   date_trunc('hour', CAST(horario_coleta AS TIMESTAMP)) AS horario_coleta_aproximado,
   current_timestamp() AS ingested_at,
-  input_file_name() AS arquivo_origem
+  _metadata.file_path AS arquivo_origem
 FROM
-  read_csv('/Volumes/lakehouse/raw_public/quotation_yfinance.csv', header=true, inferSchema=true)
+  cloud_files('/Volumes/lakehouse/raw_public/quotation_yfinance', 'csv', map('header', 'true',
+      'inferSchema', 'true'))
 ;

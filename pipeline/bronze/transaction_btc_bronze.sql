@@ -1,9 +1,9 @@
 -- Bronze table for BTC transactions
-CREATE OR REFRESH STREAMING LIVE TABLE bronze_transaction_btc
+CREATE OR REFRESH STREAMING LIVE TABLE lakehouse.bronze.transaction_btc
 COMMENT 'Bronze table from raw BTC transactions CSV'
 TBLPROPERTIES (
   'quality' = 'bronze',
-  'source' = 'raw_public/transacation_btc.csv'
+  'source' = 'raw_public/transacation_btc'
 )
 AS
 SELECT
@@ -19,7 +19,13 @@ SELECT
   arquivo_origem,
   CAST(importado_em AS TIMESTAMP) AS importado_em,
   current_timestamp() AS ingested_at,
-  input_file_name() AS arquivo_source
+  _metadata.file_path AS arquivo_source
 FROM
+<<<<<<< Updated upstream
   read_csv('/Volumes/lakehouse/raw_public/transaction_btc.csv', header=true, inferSchema=true)
 ;
+=======
+  cloud_files('/Volumes/lakehouse/raw_public/transaction_btc', 'csv', map('header', 'true',
+      'inferSchema', 'true'))
+;
+>>>>>>> Stashed changes
