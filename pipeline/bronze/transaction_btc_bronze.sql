@@ -21,5 +21,5 @@ SELECT
   current_timestamp() AS ingested_at,
   input_file_name() AS arquivo_source
 FROM
-  read_csv('/Volumes/lakehouse/raw_public/transacation_btc.csv', header=true, inferSchema=true)
+  read_csv('/Volumes/lakehouse/raw_public/transaction_btc.csv', header=true, inferSchema=true)
 ;
