@@ -6,7 +6,7 @@ CREATE OR REFRESH STREAMING TABLE silver.dim_clientes(
   CONSTRAINT segmento_valid EXPECT (segmento IN ('Financeiro', 'Indústria', 'Varejo', 'Tecnologia')) ON VIOLATION DROP ROW,
   CONSTRAINT pais_valid EXPECT (pais IN ('Brasil', 'Alemanha', 'Estados Unidos')) ON VIOLATION DROP ROW,
   CONSTRAINT estado_valid EXPECT (
-    (pais = 'Brasil' AND estado IN ('AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'))
+    (pais = 'Brasil' AND estado IN ('SE', 'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'))
     OR (pais = 'Alemanha' AND estado = 'DE')
     OR (pais = 'Estados Unidos' AND estado = 'US')
   ) ON VIOLATION DROP ROW,
