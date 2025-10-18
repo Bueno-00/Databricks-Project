@@ -1,7 +1,5 @@
 # 🚀 Databricks Project: Pipeline Financeiro e Crypto Lakehouse
 
-![Databricks Pipeline Graph - Visão Geral](https://i.imgur.com/image_7e1757.png)
-
 Este repositório documenta a implementação de um pipeline de dados completo na plataforma **Databricks**, utilizando a arquitetura **Lakehouse** e o framework **Lakeflow Declarative Pipelines** (substituto do Delta Live Tables). O foco é a ingestão e modelagem de dados de múltiplas fontes, incluindo informações de clientes, cotações de mercado (financeiro e Bitcoin) e transações, visando a criação de um modelo de dados analítico robusto e a identificação de métricas de alto valor.
 
 ## 🎯 Objetivo
@@ -60,7 +58,7 @@ Esta tabela na camada Gold é o resultado final da agregação e análise, desti
 
 O **Lakeflow Declarative Pipelines** automatiza o fluxo de trabalho e dependências, gerando o gráfico de linhagem abaixo. Ele visualiza como as fontes de dados (`bronze`) se transformam, unem e progridem até as tabelas de consumo (`gold`), com a aplicação de *Expectations* de qualidade em cada etapa.
 
-![Grafo do Pipeline Lakeflow](https://i.imgur.com/image_7e1757.png)
+A imagem se encontra no arquivo "pipeline_graph.jpg"
 
 ### Fluxo de Dependência Principal:
 
