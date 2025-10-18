@@ -1,42 +1,39 @@
--- Silver: fact_transaction_revenue
--- Join entre transações, cotações e clientes para calcular gross_value, sinal e fee
+-- Silver Layer: fact_transaction_revenue
+-- Junção entre transações e cotações, cálculo de valor e receita de taxa (camada Silver de enriquecimento)
 
-CREATE OR REFRESH STREAMING LIVE TABLE silver_fact_transaction_revenue
-COMMENT 'Silver: transaction revenue (joined with quotations and clients)'
-TBLPROPERTIES ('quality' = 'silver', 'layer' = 'silver')
-AS
-WITH t AS (
-  SELECT * FROM STREAM(silver_fact_transaction_assets)
-),
-q AS (
-  SELECT horario_coleta_aproximado, asset_symbol, preco FROM STREAM(silver_fact_quotation_assets)
-),
-c AS (
-  SELECT customer_id FROM STREAM(silver_dim_clientes)
-)
-SELECT
+CREATE OR REFRESH STREAMING TABLE silver.fact_transaction_revenue(
+  CONSTRAINT gross_value_positive EXPECT (gross_value > 0) ON VIOLATION DROP ROW,
+  CONSTRAINT fee_revenue_positive EXPECT (fee_revenue > 0) ON VIOLATION DROP ROW,
+  CONSTRAINT customer_sk_not_null EXPECT (customer_sk IS NOT NULL) ON VIOLATION DROP ROW,
+  CONSTRAINT cotacao_valida EXPECT (preco_cotacao > 0 AND timestamp_cotacao <= data_hora) ON VIOLATION DROP ROW
+) AS SELECT 
   t.transaction_id,
   t.data_hora,
   t.data_hora_aproximada,
   t.asset_symbol,
   t.quantidade,
   t.tipo_operacao,
-  q.preco AS preco_cotacao,
-  (t.quantidade * q.preco) AS gross_value,
-  CASE
+  t.moeda,
+  t.cliente_id,
+  t.canal,
+  t.mercado,
+  c.customer_id as customer_sk,
+  q.preco as preco_cotacao,
+  q.horario_coleta as timestamp_cotacao,
+  q.data_hora_aproximada as cotacao_hora_aproximada,
+  -- Cálculo do valor bruto da transação
+  (t.quantidade * q.preco) as gross_value,
+  -- Cálculo do valor bruto com sinal (positivo para VENDA, negativo para COMPRA)
+  CASE 
     WHEN t.tipo_operacao = 'VENDA' THEN (t.quantidade * q.preco)
     WHEN t.tipo_operacao = 'COMPRA' THEN -(t.quantidade * q.preco)
     ELSE 0
-  END AS gross_value_sinal,
-  (t.quantidade * q.preco) * 0.0025 AS fee_revenue,
-  t.cliente_id,
-  current_timestamp() AS ingested_at
-FROM t
-LEFT JOIN q ON q.horario_coleta_aproximado = t.data_hora_aproximada AND q.asset_symbol = t.asset_symbol
-LEFT JOIN c ON c.customer_id = t.cliente_id
-
--- Constraints
-CONSTRAINT preco_cotacao_positive EXPECT (preco_cotacao > 0) ON VIOLATION DROP ROW;
-CONSTRAINT fee_revenue_positive EXPECT (fee_revenue > 0) ON VIOLATION DROP ROW;
-CONSTRAINT customer_sk_not_null EXPECT (cliente_id IS NOT NULL) ON VIOLATION DROP ROW;
-CONSTRAINT cotacao_timestamp_before_tx EXPECT (q.horario_coleta_aproximado <= t.data_hora) ON VIOLATION DROP ROW;
+  END as gross_value_sinal,
+  -- Cálculo da receita de taxa (0.25%)
+  (t.quantidade * q.preco * 0.0025) as fee_revenue,
+  t.processed_at,
+  current_timestamp() as calculated_at
+FROM STREAM(silver.fact_transaction_assets) t
+INNER JOIN STREAM(silver.dim_clientes) c ON t.cliente_id = c.customer_id
+INNER JOIN STREAM(silver.fact_quotation_assets) q ON t.asset_symbol = q.ativo 
+  AND q.data_hora_aproximada = t.data_hora_aproximada

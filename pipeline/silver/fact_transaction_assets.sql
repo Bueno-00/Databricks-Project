@@ -1,60 +1,62 @@
--- Silver: fact_transaction_assets
--- Une transações BTC e commodities, normaliza símbolos e aplica constraints de qualidade
+-- SILVER: fact_transaction_assets
+-- Símbolo padronizado: BTC/GOLD/OIL/SILVER
 
-CREATE OR REFRESH STREAMING LIVE TABLE silver_fact_transaction_assets
-COMMENT 'Silver: unified transaction events (BTC + commodities)'
-TBLPROPERTIES ('quality' = 'silver', 'layer' = 'silver')
+CREATE OR REFRESH STREAMING LIVE TABLE silver.fact_transaction_assets
+(
+  CONSTRAINT quantidade_positive     EXPECT (quantidade > 0) ON VIOLATION DROP ROW,
+  CONSTRAINT data_hora_not_null      EXPECT (data_hora IS NOT NULL) ON VIOLATION DROP ROW,
+  CONSTRAINT tipo_operacao_valid     EXPECT (tipo_operacao IN ('COMPRA','VENDA')) ON VIOLATION DROP ROW,
+  CONSTRAINT asset_symbol_valid      EXPECT (asset_symbol IN ('BTC','GOLD','OIL','SILVER')) ON VIOLATION DROP ROW
+)
 AS
-SELECT
+SELECT 
   transaction_id,
-  CAST(data_hora AS TIMESTAMP) AS data_hora,
-  date_trunc('hour', CAST(data_hora AS TIMESTAMP)) AS data_hora_aproximada,
-  UPPER(COALESCE(ativo, commodity_code)) AS raw_asset,
-  CASE
-    WHEN UPPER(COALESCE(ativo, commodity_code)) IN ('BTC','BTC-USD') THEN 'BTC'
-    WHEN UPPER(COALESCE(ativo, commodity_code)) IN ('GOLD','GC=F') THEN 'GOLD'
-    WHEN UPPER(COALESCE(ativo, commodity_code)) IN ('OIL','CL=F') THEN 'OIL'
-    WHEN UPPER(COALESCE(ativo, commodity_code)) IN ('SILVER','SI=F') THEN 'SILVER'
+  CAST(data_hora AS TIMESTAMP)                                   AS data_hora,
+  date_trunc('hour', CAST(data_hora AS TIMESTAMP))               AS data_hora_aproximada,
+
+  -- 🔁 Mapeamento unificado de símbolo
+  CASE 
+    WHEN UPPER(ativo) IN ('BTC','BTC-USD') THEN 'BTC'
+    WHEN UPPER(ativo) IN ('GOLD','GC=F')   THEN 'GOLD'
+    WHEN UPPER(ativo) IN ('OIL','CL=F')    THEN 'OIL'
+    WHEN UPPER(ativo) IN ('SILVER','SI=F') THEN 'SILVER'
     ELSE 'UNKNOWN'
-  END AS asset_symbol,
-  CAST(quantidade AS DOUBLE) AS quantidade,
+  END                                                            AS asset_symbol,
+
+  -- REMOVIDO: O CAST já foi feito dentro do FROM (subconsulta)
+  quantidade, 
+  
   tipo_operacao,
-  moeda,
+  UPPER(moeda)                                                   AS moeda,
   cliente_id,
   canal,
   mercado,
   arquivo_origem,
-  CAST(importado_em AS TIMESTAMP) AS importado_em,
-  current_timestamp() AS ingested_at
-FROM STREAM(bronze_transaction_btc)
+  importado_em,
+  ingested_at,
+  current_timestamp()                                            AS processed_at
+FROM (
+  -- 1º SELECT: Tabela BTC
+  SELECT 
+    transaction_id, 
+    data_hora, 
+    ativo, 
+    CAST(quantidade AS DECIMAL(18,8)) AS quantidade,  -- <-- Aplicado o CAST aqui!
+    tipo_operacao, 
+    moeda, 
+    cliente_id, canal, mercado, arquivo_origem, importado_em, ingested_at
+  FROM STREAM(bronze.transaction_btc)
 
-UNION ALL
+  UNION ALL
 
-SELECT
-  transaction_id,
-  CAST(data_hora AS TIMESTAMP) AS data_hora,
-  date_trunc('hour', CAST(data_hora AS TIMESTAMP)) AS data_hora_aproximada,
-  UPPER(COALESCE(ativo, commodity_code)) AS raw_asset,
-  CASE
-    WHEN UPPER(COALESCE(ativo, commodity_code)) IN ('BTC','BTC-USD') THEN 'BTC'
-    WHEN UPPER(COALESCE(ativo, commodity_code)) IN ('GOLD','GC=F') THEN 'GOLD'
-    WHEN UPPER(COALESCE(ativo, commodity_code)) IN ('OIL','CL=F') THEN 'OIL'
-    WHEN UPPER(COALESCE(ativo, commodity_code)) IN ('SILVER','SI=F') THEN 'SILVER'
-    ELSE 'UNKNOWN'
-  END AS asset_symbol,
-  CAST(quantidade AS DOUBLE) AS quantidade,
-  tipo_operacao,
-  moeda,
-  cliente_id,
-  canal,
-  mercado,
-  arquivo_origem,
-  CAST(importado_em AS TIMESTAMP) AS importado_em,
-  current_timestamp() AS ingested_at
-FROM STREAM(bronze_transaction_commodities)
-
--- Data quality constraints
-CONSTRAINT quantidade_positive EXPECT (quantidade > 0) ON VIOLATION DROP ROW;
-CONSTRAINT data_hora_not_null EXPECT (data_hora IS NOT NULL) ON VIOLATION DROP ROW;
-CONSTRAINT tipo_operacao_valid EXPECT (tipo_operacao IN ('COMPRA','VENDA')) ON VIOLATION DROP ROW;
-CONSTRAINT asset_symbol_valid EXPECT (asset_symbol IN ('BTC','GOLD','OIL','SILVER')) ON VIOLATION DROP ROW;
+  -- 2º SELECT: Tabela Commodities
+  SELECT 
+    transaction_id, 
+    data_hora, 
+    ativo, 
+    CAST(quantidade AS DECIMAL(18,8)) AS quantidade,  -- <-- Aplicado o CAST aqui!
+    tipo_operacao, 
+    moeda, 
+    cliente_id, canal, mercado, arquivo_origem, importado_em, ingested_at
+  FROM STREAM(bronze.transaction_commodities)
+) AS combined_transactions;

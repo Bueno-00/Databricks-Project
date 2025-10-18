@@ -1,46 +1,46 @@
--- Silver: fact_quotation_assets
--- Une cotações de BTC e yfinance, normaliza símbolos e aplica constraints de qualidade
+-- Silver Layer: fact_quotation_assets
+-- União de cotações BTC e yFinance com padronização de ativo, preço e moeda
 
-CREATE OR REFRESH STREAMING LIVE TABLE silver_fact_quotation_assets
-COMMENT 'Silver: unified quotations (BTC + yfinance)'
-TBLPROPERTIES ('quality' = 'silver', 'layer' = 'silver')
-AS
-SELECT
-  ativo,
-  CAST(preco AS DOUBLE) AS preco,
-  moeda,
-  CAST(horario_coleta AS TIMESTAMP) AS horario_coleta,
-  date_trunc('hour', CAST(horario_coleta AS TIMESTAMP)) AS horario_coleta_aproximado,
-  CASE
+CREATE OR REFRESH STREAMING LIVE TABLE silver.fact_quotation_assets(
+  CONSTRAINT preco_positive EXPECT (preco > 0) ON VIOLATION DROP ROW,
+  CONSTRAINT horario_coleta_valid EXPECT (horario_coleta <= current_timestamp()) ON VIOLATION DROP ROW,
+  CONSTRAINT ativo_valid EXPECT (ativo IS NOT NULL AND ativo != '') ON VIOLATION DROP ROW,
+  CONSTRAINT moeda_valid EXPECT (moeda = 'USD') ON VIOLATION DROP ROW
+) AS SELECT 
+  CASE 
     WHEN UPPER(ativo) IN ('BTC','BTC-USD') THEN 'BTC'
-    WHEN UPPER(ativo) IN ('GC=F') THEN 'GOLD'
-    WHEN UPPER(ativo) IN ('CL=F') THEN 'OIL'
-    WHEN UPPER(ativo) IN ('SI=F') THEN 'SILVER'
+    WHEN UPPER(ativo) IN ('GOLD','GC=F')   THEN 'GOLD'
+    WHEN UPPER(ativo) IN ('OIL','CL=F')    THEN 'OIL'
+    WHEN UPPER(ativo) IN ('SILVER','SI=F') THEN 'SILVER'
     ELSE 'UNKNOWN'
-  END AS asset_symbol,
-  current_timestamp() AS ingested_at
-FROM STREAM(bronze_quotation_btc)
-
-UNION ALL
-
-SELECT
-  ativo,
-  CAST(preco AS DOUBLE) AS preco,
+  END    ativo,
+  
+  -- Removido o CAST daqui, pois ele já foi feito dentro da subconsulta.
+  preco, 
+  
   moeda,
-  CAST(horario_coleta AS TIMESTAMP) AS horario_coleta,
-  date_trunc('hour', CAST(horario_coleta AS TIMESTAMP)) AS horario_coleta_aproximado,
-  CASE
-    WHEN UPPER(ativo) IN ('BTC','BTC-USD') THEN 'BTC'
-    WHEN UPPER(ativo) IN ('GC=F') THEN 'GOLD'
-    WHEN UPPER(ativo) IN ('CL=F') THEN 'OIL'
-    WHEN UPPER(ativo) IN ('SI=F') THEN 'SILVER'
-    ELSE 'UNKNOWN'
-  END AS asset_symbol,
-  current_timestamp() AS ingested_at
-FROM STREAM(bronze_quotation_yfinance)
-
--- Data quality constraints
-CONSTRAINT preco_positive EXPECT (preco > 0) ON VIOLATION DROP ROW;
-CONSTRAINT horario_coleta_not_future EXPECT (horario_coleta <= current_timestamp()) ON VIOLATION DROP ROW;
-CONSTRAINT ativo_not_null EXPECT (ativo IS NOT NULL AND ativo != '') ON VIOLATION DROP ROW;
-CONSTRAINT moeda_usd EXPECT (moeda = 'USD') ON VIOLATION DROP ROW;
+  CAST(horario_coleta AS TIMESTAMP) as horario_coleta,
+  date_trunc('hour', CAST(horario_coleta AS TIMESTAMP)) as data_hora_aproximada,
+  ingested_at,
+  current_timestamp() as processed_at
+FROM (
+  -- Cotações Bitcoin
+  SELECT 
+    ativo,
+    CAST(preco AS DECIMAL(18,4)) as preco,  -- <-- CORREÇÃO AQUI
+    moeda,
+    horario_coleta,
+    ingested_at
+  FROM STREAM(bronze.quotation_btc)
+  
+  UNION ALL
+  
+  -- Cotações yFinance
+  SELECT 
+    ativo,
+    CAST(preco AS DECIMAL(18,4)) as preco,  -- <-- CORREÇÃO AQUI
+    moeda,
+    horario_coleta,
+    ingested_at
+  FROM STREAM(bronze.quotation_yfinance)
+) combined_quotations

@@ -21,11 +21,6 @@ SELECT
   current_timestamp() AS ingested_at,
   _metadata.file_path AS arquivo_source
 FROM
-<<<<<<< Updated upstream
-  read_csv('/Volumes/lakehouse/raw_public/transaction_btc.csv', header=true, inferSchema=true)
-;
-=======
-  cloud_files('/Volumes/lakehouse/raw_public/transaction_btc', 'csv', map('header', 'true',
+cloud_files('/Volumes/lakehouse/raw_public/transaction_btc', 'csv', map('header', 'true',
       'inferSchema', 'true'))
 ;
->>>>>>> Stashed changes
